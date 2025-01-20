@@ -2,7 +2,6 @@
 
 **Optimization-Guided Reinforcement Learning (OGRL)** is a novel paradigm that synergizes the strengths of **Mathematical Optimization Models** and **Reinforcement Learning (RL)**. By embedding mathematical programming techniques into RL frameworks, OGRL addresses key challenges in achieving efficient, high-quality decision-making in complex, dynamic environments.
 
----
 
 ### Capabilities of OGRL
 
@@ -17,7 +16,6 @@
      - Mimicking optimal decision-making.
      - Balancing exploration (RL) and exploitation (optimization).
 
----
 
 ### Challenges and Opportunities
 

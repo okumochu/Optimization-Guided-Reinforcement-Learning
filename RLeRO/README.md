@@ -2,14 +2,12 @@
 
 This repository introduces **Optimization-Guided Reinforcement Learning (RLeRO)**, an innovative framework that combines **Robust Optimization (RO)** with **Reinforcement Learning (RL)** to improve decision-making and scheduling performance in uncertain and dynamic environments. Inspired by research in chemical production scheduling, this approach bridges the gap between theoretical optimization and practical applications in dynamic, uncertain conditions.
 
----
 
 ## Key Features
 
 1. **Optimization-Guided Learning**: Integrates RO into the RL training phase to enhance learning stability and convergence.
 2. **Enhanced Robustness**: Addresses demand and yield uncertainties while providing conservative and resilient decisions.
 
----
 
 ## Methodology Overview
 
@@ -28,7 +26,6 @@ This repository introduces **Optimization-Guided Reinforcement Learning (RLeRO)*
    - A rolling window schedule transforms problem setups into RL episodes.
    - The RO solver intervenes selectively, guiding the RL agent when uncertainties exceed a predefined threshold.
 
----
 
 ## Results & Performance
 
@@ -40,7 +37,6 @@ This repository introduces **Optimization-Guided Reinforcement Learning (RLeRO)*
 - **RLeRO** vs. **Traditional RL**: Demonstrates superior robustness and solution quality under high uncertainty.
 - **RLeRO** vs. **RO**: Offers comparable results with reduced computation times, making it ideal for frequent rescheduling.
 
----
 
 ## References
 
