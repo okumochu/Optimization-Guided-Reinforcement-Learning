@@ -9,7 +9,7 @@ class Config:
         self.training_log_dir = os.path.join("src", "model", "training_log")
         
         # rlero hyper-parameters
-        self.entropy_threshold = 0.8
+        self.entropy_threshold = 0.6
         self.delta_D = 5.0
         self.delta_L = 0.5
         
@@ -22,4 +22,6 @@ class Config:
         self.max_demand = 100
         
         # training
-        self.n_steps = 50000
+        self.n_steps = 500000
+        self.training_period = 100000
+        self.test_period = 10000

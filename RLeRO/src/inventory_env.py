@@ -1,5 +1,5 @@
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import numpy as np
 from src.config import Config
 
@@ -19,11 +19,12 @@ class InventoryEnv(gym.Env):
         self.shortage_cost = config.C_s
         self.ordering_cost = config.C_o
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
         self.current_step = 0
         # Reset inventory to a value from the offline data
         state = self.data.iloc[self.current_step]
-        return np.array([state['inventory'], state['demand'], state['lead_time'], state['event']], dtype=np.float32)
+        return np.array([state['inventory'], state['demand'], state['lead_time'], state['event']], dtype=np.float32), {}
     
     def step(self, action):
         # Current state from offline data
@@ -55,4 +56,4 @@ class InventoryEnv(gym.Env):
         else:
             next_state = np.array([new_inventory, 0, 0, 0], dtype=np.float32)
             
-        return next_state, reward, done, {}
+        return next_state, reward, done, False, {}

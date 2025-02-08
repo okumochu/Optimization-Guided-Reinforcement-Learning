@@ -35,7 +35,3 @@ def generate_offline_data(n_periods=1000, seed=42):
     
     df = pd.DataFrame(data)
     return df
-
-# Generate and inspect the offline data
-offline_data = generate_offline_data()
-print(offline_data.head())

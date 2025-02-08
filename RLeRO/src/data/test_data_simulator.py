@@ -14,7 +14,7 @@ def generate_test_data(n_periods=1000, seed=42):
     lead_time_volatility = 2  # more variable lead times
     
     # For testing, dynamic events are more frequent and severe:
-    event_probability = 0.3  # higher probability than training
+    event_probability = 0.01  # higher probability than training
     for t in range(n_periods):
         # Simulate a dynamic event: 0 means normal, 1 means event (e.g., supplier disruption)
         event = np.random.choice([0, 1], p=[1 - event_probability, event_probability])
@@ -38,8 +38,4 @@ def generate_test_data(n_periods=1000, seed=42):
         })
     
     return pd.DataFrame(data)
-
-# Example usage:
-test_data = generate_test_data()
-print(test_data.head())
 
