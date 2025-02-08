@@ -1,68 +1,52 @@
 import gurobipy as gp
 from gurobipy import GRB
 
-def robust_optimization_gurobi(I_t, D_hat, delta, C_h, C_s, C_o):
+def robust_order_quantity(inventory, 
+                          estimated_demand, delta_demand, 
+                          estimated_lead_time, delta_lead_time,
+                          holding_cost=1.0, shortage_cost=5.0, ordering_cost=2.0,
+                          max_order=100):
     """
-    Solves the robust optimization problem using Gurobi.
+    Solve for the robust order quantity using Gurobi.
+    Here, we use worst-case scenarios from the uncertainty sets:
+      - Worst-case demand: highest demand (i.e., estimated_demand + delta_demand)
+      - Worst-case lead time: assume it impacts cost indirectly (if incorporated).
     
-    The problem is defined as:
-        min_{Q >= 0} max_{D in U} [ C_h * pos(I_t + Q - D) + C_s * pos(D - (I_t + Q)) + C_o * Q ]
-    with the uncertainty set U = [D_hat - delta, D_hat + delta].
-    
-    This formulation is linearized by introducing auxiliary variables:
-      - y1, y2 for the case D = D_hat - delta
-      - z1, z2 for the case D = D_hat + delta
-    such that:
-        cost1 = C_h * y1 + C_s * y2 + C_o * Q  (for D = D_hat - delta)
-        cost2 = C_h * z1 + C_s * z2 + C_o * Q  (for D = D_hat + delta)
-    and an auxiliary variable t is forced to be at least as large as both cost1 and cost2.
-    The model minimizes t.
+    For simplicity, we consider only worst-case demand in the cost function.
     """
-    model = gp.Model("robust_inventory")
-    model.setParam('OutputFlag', 0)  # suppress output
+    worst_case_demand = estimated_demand + delta_demand
 
-    # Decision variable for order quantity (Q) and auxiliary variable (t)
-    Q = model.addVar(lb=0, name="Q")
-    t = model.addVar(lb=-GRB.INFINITY, name="t")
+    # Create a new model
+    m = gp.Model("robust_inventory")
+    m.Params.OutputFlag = 0  # silent mode
+
+    # Decision variable: order quantity Q (integer decision)
+    Q = m.addVar(vtype=GRB.INTEGER, name="Q", lb=0, ub=max_order)
+
+    # Calculate inventory after ordering and worst-case demand consumption
+    new_inventory = inventory + Q - worst_case_demand
+
+    # Modeling the cost components:
+    # Use linear approximations: holding cost when new_inventory > 0 and shortage cost when new_inventory < 0
+    # We introduce auxiliary variables to represent these costs.
+    pos = m.addVar(vtype=GRB.CONTINUOUS, name="pos", lb=0)
+    neg = m.addVar(vtype=GRB.CONTINUOUS, name="neg", lb=0)
     
-    # Auxiliary variables for lower extreme (D_hat - delta)
-    y1 = model.addVar(lb=0, name="y1")
-    y2 = model.addVar(lb=0, name="y2")
+    # Constraints to linearize max(0, new_inventory) and max(0, -new_inventory)
+    m.addConstr(pos >= new_inventory)
+    m.addConstr(pos >= 0)
+    m.addConstr(neg >= -new_inventory)
+    m.addConstr(neg >= 0)
     
-    # Auxiliary variables for upper extreme (D_hat + delta)
-    z1 = model.addVar(lb=0, name="z1")
-    z2 = model.addVar(lb=0, name="z2")
+    # Total cost: holding cost + shortage cost + ordering cost
+    total_cost = holding_cost * pos + shortage_cost * neg + ordering_cost * Q
+    m.setObjective(total_cost, GRB.MINIMIZE)
     
-    model.update()
+    m.optimize()
     
-    # For D = D_hat - delta:
-    # y1 >= I_t + Q - (D_hat - delta)
-    model.addConstr(y1 >= I_t + Q - (D_hat - delta), "y1_constraint")
-    # y2 >= (D_hat - delta) - (I_t + Q)
-    model.addConstr(y2 >= (D_hat - delta) - (I_t + Q), "y2_constraint")
-    
-    # For D = D_hat + delta:
-    # z1 >= I_t + Q - (D_hat + delta)
-    model.addConstr(z1 >= I_t + Q - (D_hat + delta), "z1_constraint")
-    # z2 >= (D_hat + delta) - (I_t + Q)
-    model.addConstr(z2 >= (D_hat + delta) - (I_t + Q), "z2_constraint")
-    
-    # Define cost expressions at both extremes:
-    cost1 = C_h * y1 + C_s * y2 + C_o * Q
-    cost2 = C_h * z1 + C_s * z2 + C_o * Q
-    
-    # Ensure t is at least as large as both costs.
-    model.addConstr(t >= cost1, "t_ge_cost1")
-    model.addConstr(t >= cost2, "t_ge_cost2")
-    
-    # Set the objective to minimize t.
-    model.setObjective(t, GRB.MINIMIZE)
-    
-    model.optimize()
-    
-    if model.status == GRB.OPTIMAL:
-        Q_val = Q.X
+    if m.status == GRB.OPTIMAL:
+        robust_Q = Q.X
+        robust_cost = m.objVal
+        return robust_Q, robust_cost
     else:
-        print("Gurobi did not find an optimal solution; defaulting to RL action.")
-        Q_val = 0.0
-    return Q_val
+        return None, None
