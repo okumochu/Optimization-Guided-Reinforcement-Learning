@@ -4,49 +4,46 @@ from gurobipy import GRB
 
 def robust_order_quantity(inventory, 
                           estimated_demand, delta_demand, 
-                          estimated_lead_time, delta_lead_time,
+                          estimated_yield_rate, delta_yield_rate,
                           next_day_orders=0, second_day_orders=0, later_orders=0):
     """
-    Solve for the robust order quantity using Gurobi.
-    This function computes the order quantity Q that minimizes the worst-case cost
-    over the lead time period, taking into account both uncertainty in demand and lead time.
+    Solve for the robust production quantity using Gurobi.
+    This function computes the production quantity Q that minimizes the worst-case cost,
+    taking into account both uncertainty in demand and production yield rate.
     
     Args:
-        inventory: On-hand inventory (after processing arrivals).
-        estimated_demand: Expected demand per period.
-        delta_demand: Uncertainty in demand.
-        estimated_lead_time: Expected lead time (in periods).
-        delta_lead_time: Uncertainty in lead time.
-        next_day_orders: Orders scheduled to arrive next period.
-        second_day_orders: Orders scheduled to arrive in two periods.
-        later_orders: Orders scheduled to arrive in three or more periods.
-        
-    Returns:
-        robust_Q: The optimal order quantity under the worst-case scenario.
-        robust_cost: The corresponding worst-case cost.
+        inventory: On-hand inventory (after processing arrivals)
+        estimated_demand: Expected demand per period
+        delta_demand: Uncertainty in demand
+        estimated_yield_rate: Expected yield rate (between 0 and 1)
+        delta_yield_rate: Uncertainty in yield rate
+        next_day_orders: Orders scheduled to complete next period
+        second_day_orders: Orders scheduled to complete in two periods
+        later_orders: Orders scheduled to complete in three or more periods
     """
     config = Config()
     
-    # Worst-case lead time.
-    worst_case_lead_time = estimated_lead_time + delta_lead_time
+    # Worst-case yield rate (minimum yield)
+    worst_case_yield_rate = max(0.5, estimated_yield_rate - delta_yield_rate)
     
-    # Worst-case demand per period.
-    worst_case_demand_rate = estimated_demand + delta_demand
-    worst_case_demand_during_leadtime = worst_case_demand_rate * worst_case_lead_time
+    # Worst-case demand
+    worst_case_demand = estimated_demand + delta_demand
 
-    # Create a new Gurobi model.
+    # Create a new Gurobi model
     m = gp.Model("robust_inventory")
-    m.Params.OutputFlag = 0  # Run in silent mode.
+    m.Params.OutputFlag = 0  # Run in silent mode
 
-    # Decision variable: order quantity Q (integer).
+    # Decision variable: production quantity Q (integer)
     Q = m.addVar(vtype=GRB.INTEGER, name="Q", lb=0, ub=config.max_order)
 
-    # Compute effective inventory.
-    # (Since arrivals have already been processed, effective inventory = current inventory + pending orders.)
+    # Compute effective inventory
     effective_inventory = inventory + next_day_orders + second_day_orders + later_orders
 
-    # Inventory level after receiving the order Q and after worst-case demand during the lead time.
-    new_inventory = effective_inventory + Q - worst_case_demand_during_leadtime
+    # Expected production output after yield losses
+    expected_production = Q * worst_case_yield_rate
+    
+    # Inventory level after production completion and demand
+    new_inventory = effective_inventory + expected_production - worst_case_demand
 
     # Introduce auxiliary variables for holding (pos) and shortage (neg) components.
     pos = m.addVar(vtype=GRB.CONTINUOUS, name="pos", lb=0)

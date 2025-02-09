@@ -9,8 +9,11 @@ class PerformanceEvaluator:
         env_class: Your custom Gym environment class (e.g., InventoryEnv)
         robust_optimizer: Function that returns (order_quantity, cost) using Gurobi
         rl_model: Trained PPO model from Stable Baselines 3
-        entropy_threshold: Threshold above which RLeRO triggers robust optimization
-        delta_demand, delta_lead_time: Uncertainty parameters for robust optimization in the test setting
+        
+        Hyper-parameters:
+         - entropy_threshold: Threshold above which RLeRO triggers robust optimization
+         - delta_demand, delta_lead_time: Uncertainty parameters for robust optimization in the test setting
+           (Note: the `delta_lead_time` parameter is used for the yield_rate uncertainty).
         """
         self.config = Config()
         
@@ -20,7 +23,7 @@ class PerformanceEvaluator:
         # load environment
         self.env_class = env_class
         
-        # load model
+        # load optimizers and models
         self.robust_optimizer = robust_optimizer
         self.rl_model = rl_model
         
@@ -38,24 +41,23 @@ class PerformanceEvaluator:
         dist = self.rl_model.policy.get_distribution(obs_tensor)
         entropy = dist.entropy().mean().item()  # Actual entropy
 
-        # Get the number of actions
-        action_dim = self.env_class(self.test_data).action_space.n  # Get action dimension from environment
+        # Get the number of actions from the environment.
+        action_dim = self.env_class(self.test_data).action_space.n
 
         # Theoretical maximum entropy for normalization
-        max_entropy = math.log(action_dim) if action_dim > 1 else 1  # Avoid division by zero for single-action spaces
+        max_entropy = math.log(action_dim) if action_dim > 1 else 1
 
         # Normalize entropy to [0, 1]
         normalized_entropy = entropy / max_entropy
 
         return normalized_entropy
 
-
     def evaluate_episode(self, method):
         """
         Run a simulation episode over the test dataset using one of the methods:
-        - 'pure_rl': always use the RL policy
-        - 'pure_ro': always use robust optimization
-        - 'RLeRO': use RL unless policy entropy is above the threshold (in which case use RO)
+        - 'pure_rl': Always use the RL policy.
+        - 'pure_ro': Always use robust optimization.
+        - 'RLeRO': Use RL unless the policy entropy is above the threshold (in which case use RO).
         Returns a dictionary of performance metrics.
         """
         # Create a new environment instance for the episode using test_data.
@@ -71,13 +73,10 @@ class PerformanceEvaluator:
         robust_decisions_triggered = 0
 
         while not done:
-            # Get observation - obs is already the correct format array [inventory, demand, lead_time, event]
+            # Observation is now [inventory, forecast_demand, forecast_yield_rate]
             inventory = obs[0]
             est_demand = obs[1]
-            est_lead_time = obs[2]
-            next_day_orders = obs[3]
-            second_day_orders = obs[4]
-            later_orders = obs[5]
+            est_yield_rate = obs[2]
 
             # Choose action based on method
             if method == 'pure_rl':
@@ -85,19 +84,17 @@ class PerformanceEvaluator:
             elif method == 'pure_ro':
                 action, _ = self.robust_optimizer(
                     inventory, est_demand, self.delta_demand,
-                    est_lead_time, self.delta_lead_time,
-                    next_day_orders, second_day_orders, later_orders
+                    est_yield_rate, self.delta_lead_time
                 )
                 action = int(action) if action is not None else 0
             elif method == 'RLeRO':
-                # Compute the policy entropy for the current observation
+                # Compute the policy entropy for the current observation.
                 entropy = self.compute_policy_entropy(obs)
                 if entropy > self.entropy_threshold:
                     # When uncertain, use robust optimization.
                     action, _ = self.robust_optimizer(
                         inventory, est_demand, self.delta_demand,
-                        est_lead_time, self.delta_lead_time,
-                        next_day_orders, second_day_orders, later_orders
+                        est_yield_rate, self.delta_lead_time
                     )
                     action = int(action) if action is not None else 0
                     robust_decisions_triggered += 1
@@ -106,14 +103,15 @@ class PerformanceEvaluator:
             else:
                 raise ValueError("Unknown method: choose from 'pure_rl', 'pure_ro', 'RLeRO'")
             
-            # Take a step in the environment
+            # Take a step in the environment.
             next_obs, reward, done, _, _ = env.step(action)
-            # Reward is negative cost, so convert:
+            
+            # Reward is negative cost; convert to cost.
             cost = -reward
             total_cost += cost
             cost_list.append(cost)
             
-            # Count a stockout if the resulting inventory (in next_obs[0]) is negative.
+            # Count a stockout if the resulting inventory is negative.
             if next_obs[0] < 0:
                 stockout_count += 1
             
@@ -134,7 +132,7 @@ class PerformanceEvaluator:
             'Stockout Frequency': stockout_count,
             'Average Inventory Level': avg_inventory,
             'Inventory Turnover': inventory_turnover,
-            'Robust Decisions Triggered': robust_decisions_triggered  # only relevant for RLeRO
+            'Robust Decisions Triggered': robust_decisions_triggered  # Only relevant for RLeRO.
         }
         return metrics
 
@@ -145,5 +143,5 @@ class PerformanceEvaluator:
         for method in methods:
             metrics = self.evaluate_episode(method)
             results[method] = metrics
-        df = pd.DataFrame(results).T  # each row corresponds to a method
+        df = pd.DataFrame(results).T  # Each row corresponds to a method.
         return df
