@@ -30,7 +30,7 @@ class PerformanceEvaluator:
         # load hyper-parameters
         self.entropy_threshold = self.config.entropy_threshold
         self.delta_demand = self.config.delta_D
-        self.delta_lead_time = self.config.delta_L
+        self.delta_yield_rate = self.config.delta_Y
 
     def compute_policy_entropy(self, observation):
         """Compute the normalized policy entropy for a given observation."""
@@ -84,17 +84,18 @@ class PerformanceEvaluator:
             elif method == 'pure_ro':
                 action, _ = self.robust_optimizer(
                     inventory, est_demand, self.delta_demand,
-                    est_yield_rate, self.delta_lead_time
+                    est_yield_rate, self.delta_yield_rate
                 )
                 action = int(action) if action is not None else 0
             elif method == 'RLeRO':
                 # Compute the policy entropy for the current observation.
                 entropy = self.compute_policy_entropy(obs)
+                print(f"Entropy: {entropy}")
                 if entropy > self.entropy_threshold:
                     # When uncertain, use robust optimization.
                     action, _ = self.robust_optimizer(
                         inventory, est_demand, self.delta_demand,
-                        est_yield_rate, self.delta_lead_time
+                        est_yield_rate, self.delta_yield_rate
                     )
                     action = int(action) if action is not None else 0
                     robust_decisions_triggered += 1

@@ -9,7 +9,7 @@ class Config:
         self.training_log_dir = os.path.join("src", "model", "training_log")
         
         # rlero hyper-parameters
-        self.entropy_threshold = 0.3 # threshold for RLeRO
+        self.entropy_threshold = 0.6 # threshold for RLeRO
         self.delta_D = 5.0 # demand uncertainty for robust optimization
         self.delta_Y = 0.1 # yield rate uncertainty (±10%)
         
@@ -17,11 +17,24 @@ class Config:
         self.C_h = 1.0 # holding cost
         self.C_s = 5.0 # shortage cost
         self.C_o = 2.0 # production cost per unit
+        
+        self.max_demand = 100
         self.max_order = 100
         self.max_inventory = 100
-        self.max_demand = 100
+        
+        # demand
+        self.base_demand = 50        
+        self.train_demand_volatility = 0.1
+        self.test_demand_volatility = 0.2
+        
+        # yield rate
+        self.base_yield_rate = 0.9
+        self.max_yield_rate = 1.0
+        self.min_yield_rate = 0.5
+        self.train_yield_rate_volatility = 0.0025
+        self.test_yield_rate_volatility = 0.01
         
         # training
-        self.n_steps = 5000000 # number of training steps
-        self.training_period = 100000 # number of training periods
+        self.n_steps = 500000 # number of training steps
+        self.training_period = 10000 # number of training periods
         self.test_period = 1000 # number of test periods

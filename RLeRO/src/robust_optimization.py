@@ -4,8 +4,7 @@ from gurobipy import GRB
 
 def robust_order_quantity(inventory, 
                           estimated_demand, delta_demand, 
-                          estimated_yield_rate, delta_yield_rate,
-                          next_day_orders=0, second_day_orders=0, later_orders=0):
+                          estimated_yield_rate, delta_yield_rate):
     """
     Solve for the robust production quantity using Gurobi.
     This function computes the production quantity Q that minimizes the worst-case cost,
@@ -17,9 +16,6 @@ def robust_order_quantity(inventory,
         delta_demand: Uncertainty in demand
         estimated_yield_rate: Expected yield rate (between 0 and 1)
         delta_yield_rate: Uncertainty in yield rate
-        next_day_orders: Orders scheduled to complete next period
-        second_day_orders: Orders scheduled to complete in two periods
-        later_orders: Orders scheduled to complete in three or more periods
     """
     config = Config()
     
@@ -27,7 +23,7 @@ def robust_order_quantity(inventory,
     worst_case_yield_rate = max(0.5, estimated_yield_rate - delta_yield_rate)
     
     # Worst-case demand
-    worst_case_demand = estimated_demand + delta_demand
+    worst_case_demand = min(config.max_demand, estimated_demand + delta_demand)
 
     # Create a new Gurobi model
     m = gp.Model("robust_inventory")
@@ -35,15 +31,18 @@ def robust_order_quantity(inventory,
 
     # Decision variable: production quantity Q (integer)
     Q = m.addVar(vtype=GRB.INTEGER, name="Q", lb=0, ub=config.max_order)
-
-    # Compute effective inventory
-    effective_inventory = inventory + next_day_orders + second_day_orders + later_orders
+    
+    # Max inventory constraint
+    m.addConstr(Q <= config.max_inventory - inventory)
+    
+    # Max order constraint
+    m.addConstr(Q <= config.max_order)
 
     # Expected production output after yield losses
     expected_production = Q * worst_case_yield_rate
     
     # Inventory level after production completion and demand
-    new_inventory = effective_inventory + expected_production - worst_case_demand
+    new_inventory = expected_production - worst_case_demand
 
     # Introduce auxiliary variables for holding (pos) and shortage (neg) components.
     pos = m.addVar(vtype=GRB.CONTINUOUS, name="pos", lb=0)
