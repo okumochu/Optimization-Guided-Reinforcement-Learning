@@ -13,92 +13,97 @@ class InventoryEnv(gym.Env):
         # Initially, the inventory will be set from the data at reset.
         self.inventory = None  
         
-        # Updated Observation:
-        # Now only [inventory, forecast_demand, forecast_yield_rate]
+        # History length for demand and yield rate
+        self.history_length = 7
+        
+        # Initialize history buffers with zeros
+        self.demand_history = np.zeros(self.history_length)
+        self.yield_rate_history = np.zeros(self.history_length)
+        
+        # Updated Observation Space:
+        # [inventory, 7 demands, 7 yield rates]
+        obs_dim = 1 + 2 * self.history_length  # 1 for inventory + 7 demands + 7 yield rates
         self.observation_space = spaces.Box(
-            low=np.array([-np.inf, 0, 0], dtype=np.float32),
-            high=np.array([np.inf, np.inf, 1.0], dtype=np.float32),
+            low=np.array([-np.inf] * obs_dim, dtype=np.float32),
+            high=np.array([np.inf] * obs_dim, dtype=np.float32),
             dtype=np.float32
         )
         
         # Action: Production quantity (integer) between 0 and max_order.
-        self.action_space = spaces.Discrete(config.max_order + 1)
+        # Ensure action space matches the length of production_level_option
+        self.action_space = spaces.Discrete(len(config.production_level_option))
         
         # Cost parameters.
         self.holding_cost = config.C_h
         self.shortage_cost = config.C_s
         self.production_cost = config.C_o
-        
-        # Pending productions will be stored as a list of tuples: (planned_quantity, yield_rate)
-        self.pending_productions = []
-    
-    def process_pending_orders(self):
-        """
-        Process pending productions at the beginning of the period.
-        Apply yield rate to determine actual quantity received.
-        """
-        new_pending_productions = []
-        for planned_qty, yield_rate in self.pending_productions:
-            actual_qty = int(planned_qty * yield_rate)  # Apply yield rate
-            self.inventory += actual_qty  # Production arrives now
-        self.pending_productions = new_pending_productions
     
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.current_step = 0
         state = self.data.iloc[self.current_step]
         self.inventory = state['inventory']  # Initialize on-hand inventory from data.
-        observation = np.array([
-            self.inventory,
-            state['demand'],
-            state['yield_rate']
-        ], dtype=np.float32)
+        
+        # Reset history buffers
+        self.demand_history = np.zeros(self.history_length)
+        self.yield_rate_history = np.zeros(self.history_length)
+        
+        # Initialize first observation
+        observation = np.concatenate([
+            [self.inventory],
+            self.demand_history,
+            self.yield_rate_history
+        ]).astype(np.float32)
+        
         return observation, {}
 
     def step(self, action):
-        # 1. Process pending productions that are completed
-        self.process_pending_orders()
-        
-        # 2. Get the current period's state from the offline data
+        # Get the current period's state from the offline data
         state = self.data.iloc[self.current_step]
-        demand = state['demand']
-        yield_rate = state['yield_rate']        
+        current_demand = state['demand']
+        current_yield_rate = state['yield_rate']        
         
-        # 3. The agent's action is the production quantity
-        prod_qty = action
+        # The agent's action is the production quantity
+        prod_qty = self.config.production_level_option[action]
         
-        # 4. Simulate demand consumption for the current period
-        actual_demand = demand  
-        self.inventory -= actual_demand
+        # Apply yield rate immediately to production and add to inventory
+        actual_production = int(prod_qty * current_yield_rate)
+        self.inventory += actual_production
         
-        # 5. Calculate costs based on the post-demand inventory
+        # Simulate demand consumption for the current period
+        self.inventory -= current_demand
+        
+        # Calculate costs based on the post-demand inventory
         holding_cost = self.holding_cost * max(self.inventory, 0)
         shortage_cost = self.shortage_cost * max(-self.inventory, 0)
         production_cost = self.production_cost * prod_qty
         total_cost = holding_cost + shortage_cost + production_cost
         reward = -total_cost
         
-        # 6. Start new production. It will be completed with the given yield rate
-        if prod_qty > 0:
-            self.pending_productions.append((prod_qty, yield_rate))
+        # Update history buffers
+        self.demand_history = np.roll(self.demand_history, -1)
+        self.demand_history[-1] = current_demand
         
-        # 7. Advance the simulation.
+        self.yield_rate_history = np.roll(self.yield_rate_history, -1)
+        self.yield_rate_history[-1] = current_yield_rate
+        
+        # Advance the simulation.
         self.current_step += 1
         done = self.current_step >= len(self.data)
         
-        # 8. Construct the next observation.
+        # Construct the next observation.
         if not done:
             next_state = self.data.iloc[self.current_step]
-            next_observation = np.array([
-                self.inventory,
-                next_state['demand'],
-                next_state['yield_rate']
-            ], dtype=np.float32)
+            next_observation = np.concatenate([
+                [self.inventory],
+                self.demand_history,
+                self.yield_rate_history
+            ]).astype(np.float32)
         else:
-            next_observation = np.array([
-                self.inventory,
-                0,  # No further demand.
-                0   # No further yield rate.
-            ], dtype=np.float32)
+            next_observation = np.concatenate([
+                [self.inventory],
+                np.zeros(self.history_length),  # No further demands
+                np.zeros(self.history_length)   # No further yield rates
+            ]).astype(np.float32)
             
         return next_observation, reward, done, False, {}

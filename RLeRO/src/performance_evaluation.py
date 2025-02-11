@@ -73,31 +73,32 @@ class PerformanceEvaluator:
         robust_decisions_triggered = 0
 
         while not done:
-            # Observation is now [inventory, forecast_demand, forecast_yield_rate]
+            # Observation now includes history: [inventory, demand_history(7), yield_rate_history(7)]
             inventory = obs[0]
-            est_demand = obs[1]
-            est_yield_rate = obs[2]
+            est_demand = obs[1]  # Using the most recent demand from history
+            est_yield_rate = obs[8]  # Using the most recent yield rate from history
 
             # Choose action based on method
             if method == 'pure_rl':
                 action, _ = self.rl_model.predict(obs, deterministic=True)
             elif method == 'pure_ro':
-                action, _ = self.robust_optimizer(
+                ro_action, _ = self.robust_optimizer(
                     inventory, est_demand, self.delta_demand,
                     est_yield_rate, self.delta_yield_rate
                 )
-                action = int(action) if action is not None else 0
+                # Convert RO quantity to discrete action index
+                action = min(range(len(self.config.production_level_option)), 
+                           key=lambda i: abs(self.config.production_level_option[i] - ro_action))
             elif method == 'RLeRO':
-                # Compute the policy entropy for the current observation.
                 entropy = self.compute_policy_entropy(obs)
-                print(f"Entropy: {entropy}")
                 if entropy > self.entropy_threshold:
-                    # When uncertain, use robust optimization.
-                    action, _ = self.robust_optimizer(
+                    ro_action, _ = self.robust_optimizer(
                         inventory, est_demand, self.delta_demand,
                         est_yield_rate, self.delta_yield_rate
                     )
-                    action = int(action) if action is not None else 0
+                    # Convert RO quantity to discrete action index
+                    action = min(range(len(self.config.production_level_option)), 
+                               key=lambda i: abs(self.config.production_level_option[i] - ro_action))
                     robust_decisions_triggered += 1
                 else:
                     action, _ = self.rl_model.predict(obs, deterministic=True)
@@ -146,3 +147,68 @@ class PerformanceEvaluator:
             results[method] = metrics
         df = pd.DataFrame(results).T  # Each row corresponds to a method.
         return df
+
+    def plot_yield_demand_ro_triggers(self):
+        """
+        Plot yield rate and demand over time, marking points where RO was triggered.
+        Returns the figure for optional further customization.
+        """
+        import matplotlib.pyplot as plt
+
+        # Create a new environment instance and run an episode with RLeRO
+        env = self.env_class(self.test_data)
+        obs, _ = env.reset()
+        done = False
+        
+        demands = []
+        yield_rates = []
+        ro_triggered_steps = []
+        step = 0
+        
+        while not done:
+            # Get current demand and yield rate from observation
+            demands.append(obs[1])  # Most recent demand from history
+            yield_rates.append(obs[8])  # Most recent yield rate from history
+            
+            # Check if RO should be triggered
+            entropy = self.compute_policy_entropy(obs)
+            if entropy > self.entropy_threshold:
+                ro_triggered_steps.append(step)
+            
+            # Take step with RLeRO policy
+            action, _ = self.rl_model.predict(obs, deterministic=True)
+            obs, _, done, _, _ = env.step(action)
+            step += 1
+        
+        # Create the plot
+        fig, ax1 = plt.subplots(figsize=(12, 6))
+        
+        # Plot demand on primary y-axis
+        ax1.plot(demands, color='blue', label='Demand')
+        ax1.set_xlabel('Time Step')
+        ax1.set_ylabel('Demand', color='blue')
+        ax1.tick_params(axis='y', labelcolor='blue')
+        
+        # Create secondary y-axis for yield rate
+        ax2 = ax1.twinx()
+        ax2.plot(yield_rates, color='red', label='Yield Rate')
+        ax2.set_ylabel('Yield Rate', color='red')
+        ax2.tick_params(axis='y', labelcolor='red')
+        
+        # Add vertical lines for RO triggers
+        for ro_step in ro_triggered_steps:
+            plt.axvline(x=ro_step, color='green', alpha=0.3, linestyle='--')
+        
+        # Add legend
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+        
+        # Add text for RO triggers
+        plt.text(0.02, 0.98, f'RO Triggered: {len(ro_triggered_steps)} times', 
+                transform=ax1.transAxes, verticalalignment='top')
+        
+        plt.title('Demand and Yield Rate Over Time\nwith RO Trigger Points')
+        plt.tight_layout()
+        
+        return fig

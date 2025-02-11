@@ -7,10 +7,6 @@ def generate_data(n_periods, mode, seed=42):
     np.random.seed(seed)
     data = []
     
-    # Base parameters
-    base_demand = config.base_demand
-    base_yield_rate = config.base_yield_rate  # 90% yield rate on average
-    
     if mode == "train":
         demand_volatility = config.train_demand_volatility
         yield_rate_volatility = config.train_yield_rate_volatility # 2.5% variation in yield rate

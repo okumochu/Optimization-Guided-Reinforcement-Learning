@@ -9,7 +9,7 @@ class Config:
         self.training_log_dir = os.path.join("src", "model", "training_log")
         
         # rlero hyper-parameters
-        self.entropy_threshold = 0.6 # threshold for RLeRO
+        self.entropy_threshold = 0.1 # threshold for RLeRO
         self.delta_D = 5.0 # demand uncertainty for robust optimization
         self.delta_Y = 0.1 # yield rate uncertainty (±10%)
         
@@ -35,6 +35,8 @@ class Config:
         self.test_yield_rate_volatility = 0.01
         
         # training
-        self.n_steps = 500000 # number of training steps
         self.training_period = 10000 # number of training periods
         self.test_period = 1000 # number of test periods
+        self.production_level_option = [0, 20, 40, 60, 80, 100]
+        self.n_steps = self.training_period * 1000 # number of training steps
+
