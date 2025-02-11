@@ -9,7 +9,7 @@ class Config:
         self.training_log_dir = os.path.join("src", "model", "training_log")
         
         # rlero hyper-parameters
-        self.entropy_threshold = 0.1 # threshold for RLeRO
+        self.entropy_threshold = 0.001 # threshold for RLeRO
         self.delta_D = 5.0 # demand uncertainty for robust optimization
         self.delta_Y = 0.1 # yield rate uncertainty (±10%)
         
