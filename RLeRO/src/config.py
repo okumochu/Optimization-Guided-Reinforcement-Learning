@@ -38,5 +38,5 @@ class Config:
         self.training_period = 10000 # number of training periods
         self.test_period = 1000 # number of test periods
         self.production_level_option = [0, 20, 40, 60, 80, 100]
-        self.n_steps = self.training_period * 1000 # number of training steps
+        self.n_steps = self.training_period * 50 # number of training steps
 
